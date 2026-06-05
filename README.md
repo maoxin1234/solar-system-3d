@@ -2,6 +2,8 @@
 
 > 科学级太阳系实时 3D 可视化：**JPL 星历驱动**、真实 NASA 行星贴图、开普勒椭圆轨道、卫星真实根数。可缩放、可拖拽，悬停 / 点击查看天体信息与**实时轨道量**。单文件离线可运行。
 
+**🌐 在线体验 · [Live Demo](https://maoxin1234.github.io/solar-system-3d/)**
+
 ![太阳系总览](docs/screenshots/01-overview.jpg)
 
 ---
@@ -106,8 +108,8 @@ src/                ← 源码（在这里改）
 
 ## 🛠 技术栈
 
-[three.js](https://threejs.org) r0.160（CDN importmap）· WebGL · UnrealBloom 选择性辉光后处理 · 程序化噪声纹理 · 自定义 GLSL 着色器（太阳 / 大气 / 城市夜灯）。
+[three.js](https://threejs.org) r160（CDN importmap）· WebGL · UnrealBloom 选择性辉光后处理 · 程序化噪声纹理 · 自定义 GLSL 着色器（太阳 / 大气 / 城市夜灯）。
 
 ## 📄 许可证
 
-MIT
+[MIT](LICENSE) © maoxin1234
