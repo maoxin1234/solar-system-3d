@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>太阳系 3D 模型 · Solar System</title>
+<!-- INJECT:CSS -->
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="loading">
+    <div class="loader-ring"></div>
+    <div class="title">SOLAR SYSTEM</div>
+    <div class="status" id="load-status">正在初始化星图…</div>
+    <div class="bar"><i id="load-bar"></i></div>
+  </div>
+
+  <div id="header">
+    <h1>太阳系 · SOLAR SYSTEM</h1>
+    <p>JPL 星历驱动 · J2000 历元 · 开普勒轨道</p>
+    <button id="btn-about">ⓘ 精度与数据说明</button>
+  </div>
+
+  <div id="about-mask"></div>
+  <div id="about-panel">
+    <div class="close" id="about-close">×</div>
+    <h2>模型精度与数据说明</h2>
+    <div class="ab-sec">
+      <div class="ab-h">轨道数据（双表自动切换）</div>
+      <p>采用 JPL/SSD《主要行星近似位置的开普勒根数》(E. M. Standish)。<b>1800–2050</b> 用 Table 1；区间外自动切换 <b>Table 2</b>（含木–海大不等式修正项 b,c,s,f），有效区间扩展至约 <b>公元前 3000 – 公元 3000</b>。日心黄道 J2000 坐标系。</p>
+    </div>
+    <div class="ab-sec">
+      <div class="ab-h">精度（已在浏览器内核验）</div>
+      <p>1800–2050 内行星约 <b>角分级</b>（已对 J2000 教科书值核验：地球 0.9833 au / 30.29 km·s⁻¹）。轨道速度由活力公式 v=√(GM·(2/r−1/a))，开普勒方程牛顿迭代解。坐标为 <b>J2000 框架</b>，未含岁差，故与"当年分/至点"参考相差约 0.014°/年。</p>
+    </div>
+    <div class="ab-sec">
+      <div class="ab-h">地表贴图</div>
+      <p>联网时加载 <b>真实 NASA / 天文台贴图</b>（经 CDN，含八大行星地表、月球、土星真实环纹）；离线时自动回退为程序化噪声纹理。地球云层与夜面城市灯光采用程序化自定义着色器；太阳为实时 HDR 等离子体着色器（动态发光优于静态贴图）。</p>
+    </div>
+    <div class="ab-sec">
+      <div class="ab-h">尺度与自转</div>
+      <p><b>真实比例</b>模式下行星间距离与半径均按真实比例；为保持远距离可见，本体在屏幕上不小于约 3.5 像素（仅影响显示，不影响位置）。自转采用真实恒星周期与方向（金星、天王星逆行），含真实黄赤交角与扁率。</p>
+    </div>
+    <div class="ab-sec">
+      <div class="ab-h">卫星与已知简化</div>
+      <p>· 卫星采用<b>真实开普勒根数</b>(a, e, i, 周期)，于行星赤道面运行；真实比例下为真实星-卫距离。升交点经度与历元相位为稳定近似（非精密卫星星历）。<br>
+         · 自转轴指向未对齐真实至点；小行星带为示意分布。<br>
+         · <b>未建模</b>：行星间引力摄动、章动、相对论效应、光行时修正。</p>
+    </div>
+    <div class="ab-sec">
+      <div class="ab-h">适用场景</div>
+      <p>教学演示、科普、近似定位与行星构型研究。需要<b>角秒级精密星历</b>（探测器导航、掩星预报等）请使用 JPL Horizons / SPICE。</p>
+    </div>
+    <div class="ab-foot">渲染 three.js · 贴图 NASA/three.js/threex.planets · 单文件 · 数据核校于 J2000.0</div>
+  </div>
+
+  <div id="hint">
+    <div><b>拖动</b> 旋转视角</div>
+    <div><b>滚轮</b> 缩放远近</div>
+    <div><b>悬停</b> 查看星球信息</div>
+    <div><b>点击星球</b> 聚焦追踪</div>
+  </div>
+
+  <div id="tooltip"></div>
+  <div id="focus-info"></div>
+  <div id="detail-panel"></div>
+  <div id="tex-status"></div>
+
+  <div id="panel">
+    <div class="p-row p-date">
+      <span id="sim-date">—</span>
+      <span id="sim-jd">JD —</span>
+      <input type="datetime-local" id="date-pick" title="跳转到任意历元 (UTC)">
+      <button id="btn-now" class="wide" title="跳到当前真实时刻">⊙ 此刻</button>
+    </div>
+    <div class="p-row">
+      <button id="btn-rev" title="倒放 / 正放">◀</button>
+      <button id="btn-play" title="暂停 / 播放">⏸</button>
+      <div class="ctrl"><input id="speed" type="range" min="0" max="1" step="0.001" value="0.72"><span id="rate-label" class="rate">5 天/秒</span></div>
+      <div class="sep"></div>
+      <button id="btn-scale" class="wide" title="切换 真实比例 / 示意比例">示意比例</button>
+      <label class="chk"><input type="checkbox" id="chk-orbit" checked> 轨道</label>
+      <label class="chk"><input type="checkbox" id="chk-label" checked> 标签</label>
+      <label class="chk"><input type="checkbox" id="chk-grid"> 刻度</label>
+      <div class="sep"></div>
+      <button id="btn-reset" title="回到全景">⟲</button>
+    </div>
+  </div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<!-- INJECT:JS -->
+</body>
+</html>

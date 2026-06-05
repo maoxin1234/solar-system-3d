@@ -1,0 +1,13 @@
+{
+  "name": "solar-system-3d",
+  "version": "1.0.0",
+  "description": "科学级太阳系 3D 模型：JPL 星历驱动、真实贴图、开普勒轨道。单文件离线可运行，源码模块化 + 构建内联。",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "serve": "npx -y serve -l 4173",
+    "dev": "node build.mjs && npx -y serve -l 4173"
+  },
+  "license": "MIT"
+}
