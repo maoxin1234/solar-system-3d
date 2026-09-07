@@ -141,3 +141,131 @@ function makePlanetOrbit(key, n = 360) {
   return new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: 0x3a5378, transparent: true, opacity: 0.5 }));
 }
 
+/* 解算彗星日心黄道坐标(au)、速度(km/s)等 */
+function cometState(comet, jdt) {
+  const { a, e, I, O, w, P, T0 } = comet;
+  const n = (360 / (P * 365.25)) * DEG;
+  let M = (n * (jdt - T0)) % (2 * Math.PI);
+  if (M < 0) M += 2 * Math.PI;
+
+  const I_rad = I * DEG, O_rad = O * DEG, w_rad = w * DEG;
+  let E = M + e * Math.sin(M);
+  for (let i = 0; i < 15; i++) {
+    const dE = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+    E -= dE;
+    if (Math.abs(dE) < 1e-10) break;
+  }
+
+  const xp = a * (Math.cos(E) - e);
+  const yp = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
+
+  const cw = Math.cos(w_rad), sw = Math.sin(w_rad);
+  const cO = Math.cos(O_rad), sO = Math.sin(O_rad);
+  const cI = Math.cos(I_rad), sI = Math.sin(I_rad);
+
+  const x = (cw * cO - sw * sO * cI) * xp + (-sw * cO - cw * sO * cI) * yp;
+  const y = (cw * sO + sw * cO * cI) * xp + (-sw * sO + cw * cO * cI) * yp;
+  const z = (sw * sI) * xp + (cw * sI) * yp;
+  const r = Math.sqrt(x * x + y * y + z * z);
+  const v = Math.sqrt(GM_SUN * (2 / (r * AU_KM) - 1 / (a * AU_KM)));
+
+  return { x, y, z, r, a, e, I, v, periodYr: P };
+}
+
+function makeCometOrbit(comet, n = 360) {
+  const { a, e, I, O, w } = comet;
+  const I_rad = I * DEG, O_rad = O * DEG, w_rad = w * DEG;
+  const cw = Math.cos(w_rad), sw = Math.sin(w_rad);
+  const cO = Math.cos(O_rad), sO = Math.sin(O_rad);
+  const cI = Math.cos(I_rad), sI = Math.sin(I_rad);
+  const v = new THREE.Vector3(), arr = [];
+  for (let i = 0; i <= n; i++) {
+    const E = (i / n) * 2 * Math.PI;
+    const xp = a * (Math.cos(E) - e);
+    const yp = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
+    const x = (cw * cO - sw * sO * cI) * xp + (-sw * cO - cw * sO * cI) * yp;
+    const y = (cw * sO + sw * cO * cI) * xp + (-sw * sO + cw * cO * cI) * yp;
+    const z = (sw * sI) * xp + (cw * sI) * yp;
+    arr.push(eclToWorld(x, y, z, v).clone());
+  }
+  const g = new THREE.BufferGeometry().setFromPoints(arr);
+  return new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: 0x4df0ff, transparent: true, opacity: 0.55 }));
+}
+
+/* 解算深空探测器日心坐标(au)与任务物理量 */
+function probeState(probe, jdt) {
+  if (probe.orbit) {
+    const s = cometState(probe.orbit, jdt);
+    return { ...s, name: probe.name, key: probe.key };
+  }
+
+  const fb = probe.flybys;
+  const asymp = probe.asymptotic;
+  const lastFb = fb[fb.length - 1];
+
+  let x = 0, y = 0, z = 0;
+  if (jdt < fb[0].jd) {
+    const p0 = fb[0];
+    const r = p0.r, lon = p0.lon * DEG, lat = p0.lat * DEG;
+    x = r * Math.cos(lat) * Math.cos(lon);
+    y = r * Math.cos(lat) * Math.sin(lon);
+    z = r * Math.sin(lat);
+  } else if (jdt >= lastFb.jd) {
+    const dtYears = (jdt - lastFb.jd) / 365.25;
+    const rLast = lastFb.r, lonLast = lastFb.lon * DEG, latLast = lastFb.lat * DEG;
+    const xLast = rLast * Math.cos(latLast) * Math.cos(lonLast);
+    const yLast = rLast * Math.cos(latLast) * Math.sin(lonLast);
+    const zLast = rLast * Math.sin(latLast);
+
+    const asympLon = asymp.eclLon * DEG, asympLat = asymp.eclLat * DEG;
+    const vx = asymp.speedAUPerYr * Math.cos(asympLat) * Math.cos(asympLon);
+    const vy = asymp.speedAUPerYr * Math.cos(asympLat) * Math.sin(asympLon);
+    const vz = asymp.speedAUPerYr * Math.sin(asympLat);
+
+    x = xLast + vx * dtYears;
+    y = yLast + vy * dtYears;
+    z = zLast + vz * dtYears;
+  } else {
+    let idx = 0;
+    while (idx < fb.length - 1 && jdt > fb[idx + 1].jd) idx++;
+    const f0 = fb[idx], f1 = fb[idx + 1];
+    const u = (jdt - f0.jd) / (f1.jd - f0.jd);
+    const smoothU = u * u * (3 - 2 * u);
+
+    const r0 = f0.r, lon0 = f0.lon * DEG, lat0 = f0.lat * DEG;
+    const r1 = f1.r, lon1 = f1.lon * DEG, lat1 = f1.lat * DEG;
+
+    const x0 = r0 * Math.cos(lat0) * Math.cos(lon0), y0 = r0 * Math.cos(lat0) * Math.sin(lon0), z0 = r0 * Math.sin(lat0);
+    const x1 = r1 * Math.cos(lat1) * Math.cos(lon1), y1 = r1 * Math.cos(lat1) * Math.sin(lon1), z1 = r1 * Math.sin(lat1);
+
+    x = x0 + (x1 - x0) * smoothU;
+    y = y0 + (y1 - y0) * smoothU;
+    z = z0 + (z1 - z0) * smoothU;
+  }
+
+  const r = Math.sqrt(x * x + y * y + z * z);
+  const v = asymp ? asymp.speedAUPerYr * (AU_KM / (365.25 * 86400)) : 16.0;
+
+  return { x, y, z, r, v, name: probe.name, key: probe.key };
+}
+
+function makeProbeTrajectory(probe, n = 300) {
+  if (probe.orbit) {
+    const l = makeCometOrbit(probe.orbit, 240);
+    l.material.color.setHex(0xffaa33);
+    return l;
+  }
+
+  const v = new THREE.Vector3(), pts = [];
+  const startJD = probe.launchJD;
+  const endJD = dateToJD(new Date('2035-01-01'));
+  for (let i = 0; i <= n; i++) {
+    const tj = startJD + (i / n) * (endJD - startJD);
+    const s = probeState(probe, tj);
+    pts.push(eclToWorld(s.x, s.y, s.z, v).clone());
+  }
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  return new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xffd152, transparent: true, opacity: 0.5 }));
+}
+
+

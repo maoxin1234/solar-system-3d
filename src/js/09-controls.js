@@ -72,6 +72,22 @@ function setScaleMode(mode) {
     item.orbitLine.geometry.dispose();
     item.orbitLine.geometry = makeMoonOrbitGeom(item.data);
   }
+  // 彗星轨道线随比例模式重建
+  for (const c of comets) {
+    if (!c.orbitLine) continue;
+    const tmp = makeCometOrbit(c.data);
+    c.orbitLine.geometry.dispose();
+    c.orbitLine.geometry = tmp.geometry;
+    tmp.material.dispose();
+  }
+  // 探测器轨道线随比例模式重建
+  for (const pr of probes) {
+    if (!pr.trajectoryLine) continue;
+    const tmp = makeProbeTrajectory(pr.data);
+    pr.trajectoryLine.geometry.dispose();
+    pr.trajectoryLine.geometry = tmp.geometry;
+    tmp.material.dispose();
+  }
   // 小行星带仅在示意模式（其位置为示意单位）
   if (asteroidBelt) asteroidBelt.mesh.visible = (mode === 'schematic');
   buildAuGrid();   // 刻度环随比例模式重建

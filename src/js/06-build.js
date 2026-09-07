@@ -9,6 +9,8 @@ const planetMeshes = []; // 用于 raycaster
 const orbitObjs = [];
 const labelObjs = [];
 const moons = [];        // 卫星 {data, moonPos, mesh, M0}
+const comets = [];       // 彗星 {data, holder, mesh, ...}
+const probes = [];       // 探测器 {data, holder, mesh, ...}
 let asteroidBelt = null;
 let sunPhase = 0;        // 太阳表面动画相位（独立于仿真时钟）
 let daysPerSec = 5;      // 时间速率：每真实秒推进的天数
@@ -19,7 +21,7 @@ const segHi = 64, segLo = 48;
 
 async function build() {
   const N = makePerlin(2024);
-  const total = PLANETS.length + 2;
+  const total = PLANETS.length + 2 + 1 + PROBES.length;
   let step = 0;
   const tick = async (txt) => { loadStatus.textContent = txt; loadBar.style.width = `${(++step / total) * 100}%`; await nextFrame(); await nextFrame(); };
 
@@ -137,6 +139,43 @@ async function build() {
     const s0 = planetState(p.key, jd);
     eclToWorld(s0.x, s0.y, s0.z, tmpV);
     planetPos.position.copy(tmpV);
+  }
+
+  // --- 哈雷彗星 (1P/Halley) ---
+  await tick('绘制轨道与彗尾：哈雷彗星…');
+  const cometOrbit = makeCometOrbit(COMET_HALLEY);
+  scene.add(cometOrbit); orbitObjs.push(cometOrbit);
+  const cometObj = createComet(COMET_HALLEY, N);
+  scene.add(cometObj.holder);
+  planetMeshes.push(cometObj.mesh);
+
+  const cometLabel = makeLabel(COMET_HALLEY.name);
+  cometLabel.userData = { holder: cometObj.holder, radius: COMET_HALLEY.radius };
+  scene.add(cometLabel); labelObjs.push(cometLabel);
+
+  const sComet0 = cometState(COMET_HALLEY, jd);
+  eclToWorld(sComet0.x, sComet0.y, sComet0.z, tmpV);
+  cometObj.holder.position.copy(tmpV);
+  comets.push({ data: COMET_HALLEY, ...cometObj, orbitLine: cometOrbit });
+
+  // --- 人类深空探测器 (Voyager 1/2, New Horizons, Parker) ---
+  for (const pr of PROBES) {
+    await tick(`定位深空探测器：${pr.name}…`);
+    const trajLine = makeProbeTrajectory(pr);
+    scene.add(trajLine); orbitObjs.push(trajLine);
+
+    const probeObj = createProbe(pr);
+    scene.add(probeObj.holder);
+    planetMeshes.push(probeObj.mesh);
+
+    const probeLabel = makeLabel(pr.name);
+    probeLabel.userData = { holder: probeObj.holder, radius: pr.radius };
+    scene.add(probeLabel); labelObjs.push(probeLabel);
+
+    const sProbe0 = probeState(pr, jd);
+    eclToWorld(sProbe0.x, sProbe0.y, sProbe0.z, tmpV);
+    probeObj.holder.position.copy(tmpV);
+    probes.push({ data: pr, ...probeObj, trajectoryLine: trajLine });
   }
 
   // --- 小行星带（主带，火-木之间 2.1–3.3 au，示意模式下显示） ---

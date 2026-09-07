@@ -38,15 +38,72 @@
   #loading .bar { margin-top: 16px; width: 240px; height: 3px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
   #loading .bar i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg,#4a82ff,#9cc0ff); transition: width .3s ease; }
 
-  /* ===== 标题 ===== */
+  /* ===== 标题与搜索栏 ===== */
   #header {
-    position: fixed; top: 22px; left: 26px; z-index: 10; user-select: none;
-    pointer-events: none;
+    position: fixed; top: 20px; left: 24px; z-index: 20; user-select: none;
+    pointer-events: none; display: flex; flex-direction: column; gap: 8px;
   }
+  #header .h-main { pointer-events: none; }
   #header h1 { font-size: 17px; font-weight: 500; letter-spacing: 3px; color: #eaf1ff; }
   #header p { font-size: 11px; color: #6f83a0; letter-spacing: 1px; margin-top: 3px; }
+
+  /* 搜索框 (Spotlight Search) */
+  .search-box {
+    position: relative; width: 300px; pointer-events: auto; margin-top: 2px;
+  }
+  .search-input-wrap {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(13, 20, 36, 0.75); border: 1px solid rgba(120, 160, 230, 0.28);
+    border-radius: 20px; padding: 4px 10px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
+  }
+  .search-input-wrap:focus-within {
+    border-color: rgba(125, 208, 255, 0.7);
+    box-shadow: 0 0 16px rgba(74, 130, 255, 0.3);
+    background: rgba(15, 24, 45, 0.9);
+  }
+  .search-icon { font-size: 12px; opacity: 0.7; }
+  #celestial-search {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: #eaf1ff; font-family: inherit; font-size: 12px;
+  }
+  #celestial-search::placeholder { color: #5a7090; font-size: 11px; }
+  .search-kbd {
+    background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px; padding: 1px 5px; font-size: 10px; color: #8aa0c4;
+  }
+  .search-results {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+    max-height: 280px; overflow-y: auto;
+    background: rgba(11, 17, 30, 0.94); border: 1px solid rgba(120, 160, 230, 0.3);
+    border-radius: 12px; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    display: none; flex-direction: column; padding: 4px;
+  }
+  .search-results.show { display: flex; }
+  .search-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 10px; border-radius: 8px; cursor: pointer;
+    transition: background 0.12s;
+  }
+  .search-item:hover, .search-item.active {
+    background: rgba(74, 130, 255, 0.22);
+  }
+  .search-item-info { display: flex; flex-direction: column; gap: 2px; }
+  .search-item-name { font-size: 12.5px; color: #eaf1ff; font-weight: 500; }
+  .search-item-en { font-size: 10.5px; color: #7f95b5; }
+  .search-item-tag {
+    font-size: 10px; padding: 2px 6px; border-radius: 10px;
+    background: rgba(120, 160, 230, 0.15); color: #8ec3ff;
+    border: 1px solid rgba(120, 160, 230, 0.25);
+  }
+  .search-empty {
+    padding: 12px; text-align: center; font-size: 12px; color: #7f95b5;
+  }
+
   #btn-about {
-    pointer-events: auto; margin-top: 9px; cursor: pointer;
+    pointer-events: auto; margin-top: 2px; cursor: pointer; align-self: flex-start;
     background: rgba(120,160,230,.12); border: 1px solid rgba(120,160,230,.3);
     color: #aac3f0; font-size: 11px; padding: 4px 11px; border-radius: 14px; transition: all .15s;
   }
@@ -237,8 +294,18 @@
   </div>
 
   <div id="header">
-    <h1>太阳系 · SOLAR SYSTEM</h1>
-    <p>JPL 星历驱动 · J2000 历元 · 开普勒轨道</p>
+    <div class="h-main">
+      <h1>太阳系 · SOLAR SYSTEM</h1>
+      <p>JPL 星历驱动 · J2000 历元 · 开普勒轨道 · 哈雷彗星 · 深空探测器</p>
+    </div>
+    <div class="search-box">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="celestial-search" placeholder="搜索天体、彗星、探测器... (/)" autocomplete="off" spellcheck="false">
+        <kbd class="search-kbd">/</kbd>
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </div>
     <button id="btn-about">ⓘ 精度与数据说明</button>
   </div>
 
@@ -857,6 +924,140 @@ const SUN_INFO = {
   desc:'太阳系的中心恒星，通过核聚变释放巨大能量，是地球上一切生命的能量来源。'
 };
 
+/* =========================================================================
+   4c. 著名周期彗星：哈雷彗星 (1P/Halley)
+   JPL 轨道根数：高度偏心椭圆轨道，逆行，近日点深入金星轨道内，远日点超越海王星
+   ========================================================================= */
+const COMET_HALLEY = {
+  key: 'halley',
+  name: '哈雷彗星',
+  en: '1P/Halley',
+  tag: '周期彗星 · 逆行扁椭圆',
+  isComet: true,
+  radius: 0.6,
+  radiusKm: 5.5,
+  a: 17.834,
+  e: 0.96714,
+  I: 162.26,
+  O: 58.42,
+  w: 111.33,
+  P: 75.32,
+  T0: 2446470.97, // 1986-02-09.47 近日点通过
+  info: {
+    '类型': '短周期彗星 (75.3 年)',
+    '近日点距': '0.586 AU (8,766 万 km)',
+    '远日点距': '35.08 AU (52.48 亿 km)',
+    '公转周期': '75.32 年 (逆行)',
+    '彗核尺寸': '约 15 × 8 × 8 km',
+    '上次近日点': '1986 年 2 月 9 日',
+    '下次近日点': '2061 年 7 月 28 日'
+  },
+  desc: '人类首颗被确认周期的彗星。轨道极其狭长且逆行，近日点跨入金星轨道内，远日点深达海王星轨道外。近太阳时受太阳辐射与太阳风激发出数十万公里的壮观离子尾与尘埃尾。'
+};
+
+/* =========================================================================
+   4d. 人类深空与星际探测器 (Voyager 1/2, New Horizons, Parker)
+   ========================================================================= */
+const PROBES = [
+  {
+    key: 'voyager1',
+    name: '旅行者 1 号',
+    en: 'Voyager 1',
+    tag: '星际探测器 · 人类最远造物',
+    isProbe: true,
+    radius: 0.5,
+    launchDate: '1977-09-05',
+    launchJD: 2443391.5,
+    asymptotic: { speedAUPerYr: 3.59, eclLon: 255.4, eclLat: 35.0 },
+    flybys: [
+      { name: '发射', jd: 2443391.5, r: 1.0, lon: 165, lat: 0 },
+      { name: '木星飞掠', jd: 2443938.5, r: 5.2, lon: 110, lat: 1.2 },
+      { name: '土星飞掠', jd: 2444555.5, r: 9.5, lon: 155, lat: 5.5 },
+      { name: '突破日球层顶', jd: 2456164.5, r: 121.6, lon: 255.4, lat: 35.0 }
+    ],
+    info: {
+      '发射日期': '1977 年 9 月 5 日',
+      '任务状态': '进入星际空间 (持续传回数据)',
+      '逃逸速度': '约 16.9 km/s (3.59 AU/年)',
+      '天线口径': '3.7 米高增益高精度天线',
+      '搭载唱片': '金唱片 (地球文明音画档案)',
+      '标志成就': '人类制造飞行最遥远的物体'
+    },
+    desc: '已跨越日球层顶进入恒星际空间，正向鹿豹座方向永久飞驰。携带镀金铜质唱片，录制了地球自然之声、多元语言问候与人类文明杰作。'
+  },
+  {
+    key: 'voyager2',
+    name: '旅行者 2 号',
+    en: 'Voyager 2',
+    tag: '星际探测器 · 行星大巡游',
+    isProbe: true,
+    radius: 0.5,
+    launchDate: '1977-08-20',
+    launchJD: 2443375.5,
+    asymptotic: { speedAUPerYr: 3.12, eclLon: 290.0, eclLat: -37.0 },
+    flybys: [
+      { name: '发射', jd: 2443375.5, r: 1.0, lon: 150, lat: 0 },
+      { name: '木星飞掠', jd: 2444064.5, r: 5.2, lon: 125, lat: 1.0 },
+      { name: '土星飞掠', jd: 2444842.5, r: 9.5, lon: 168, lat: 3.0 },
+      { name: '天王星飞掠', jd: 2446454.5, r: 19.2, lon: 245, lat: -10.0 },
+      { name: '海王星飞掠', jd: 2447763.5, r: 30.1, lon: 280, lat: -31.0 },
+      { name: '突破日球层顶', jd: 2458427.5, r: 119.0, lon: 290.0, lat: -37.0 }
+    ],
+    info: {
+      '发射日期': '1977 年 8 月 20 日',
+      '任务状态': '进入星际空间 (运行中)',
+      '逃逸速度': '约 15.3 km/s (3.12 AU/年)',
+      '人类纪录': '唯一连续探访天王星和海王星',
+      '重大发现': '木卫一活火山、海卫一间歇泉'
+    },
+    desc: '利用 176 年一遇的罕见外行星几何对齐，完成了人类航天史上唯一的"行星大巡游"，先后近距离考察木星、土星、天王星与海王星及其环系。'
+  },
+  {
+    key: 'newhorizons',
+    name: '新视野号',
+    en: 'New Horizons',
+    tag: '柯伊伯带探测器 · 冥王星先驱',
+    isProbe: true,
+    radius: 0.5,
+    launchDate: '2006-01-19',
+    launchJD: 2453754.5,
+    asymptotic: { speedAUPerYr: 2.94, eclLon: 288.5, eclLat: 2.2 },
+    flybys: [
+      { name: '发射', jd: 2453754.5, r: 1.0, lon: 118, lat: 0 },
+      { name: '木星引力弹弓', jd: 2454159.5, r: 5.2, lon: 150, lat: 1.1 },
+      { name: '近距离飞掠冥王星', jd: 2457217.5, r: 32.9, lon: 282, lat: 2.0 },
+      { name: '探访天涯海角 (Arrokoth)', jd: 2458484.5, r: 43.3, lon: 285, lat: 2.1 }
+    ],
+    info: {
+      '发射日期': '2006 年 1 月 19 日',
+      '发射初速': '16.26 km/s (当时史上最高)',
+      '冥王星近飞': '2015 年 7 月 14 日 (12,500 km)',
+      '探测目标': '柯伊伯带最原始天体群'
+    },
+    desc: '历经九年半长途跋涉，传回震撼世界的冥王星高清照与"心形氮冰平原"（汤博区），随后探访了距地球 66 亿公里的接触双小行星"天涯海角"。'
+  },
+  {
+    key: 'parker',
+    name: '帕克太阳探测器',
+    en: 'Parker Solar Probe',
+    tag: '极限太阳探测器 · 触碰日冕',
+    isProbe: true,
+    radius: 0.5,
+    launchDate: '2018-08-12',
+    launchJD: 2458342.5,
+    orbit: { a: 0.385, e: 0.88, I: 3.4, O: 76.0, w: 120.0, P: 0.24, T0: 2460303.5 },
+    info: {
+      '发射日期': '2018 年 8 月 12 日',
+      '最近近日点': '0.046 AU (约 690 万 km)',
+      '最高航速': '超 690,000 km/h (192 km/s)',
+      '耐温隔热': '11.4 cm 碳复合隔热罩 (耐 1,377℃)',
+      '科学目标': '破解日冕超高温加热机制'
+    },
+    desc: '人类首个直接进入太阳日冕层的探测器，屡破人造飞行器速度与距日极限记录。通过多次金星重力弹弓减小近日点，宛如"浴火凤凰"近距离探测太阳风源头。'
+  }
+];
+
+
 
 /* ====================== src/js/04-ephemeris.js ====================== */
 /* ===== JPL 星历根数 + 开普勒解算 + 坐标/尺度 =====
@@ -1002,6 +1203,134 @@ function makePlanetOrbit(key, n = 360) {
   return new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: 0x3a5378, transparent: true, opacity: 0.5 }));
 }
 
+/* 解算彗星日心黄道坐标(au)、速度(km/s)等 */
+function cometState(comet, jdt) {
+  const { a, e, I, O, w, P, T0 } = comet;
+  const n = (360 / (P * 365.25)) * DEG;
+  let M = (n * (jdt - T0)) % (2 * Math.PI);
+  if (M < 0) M += 2 * Math.PI;
+
+  const I_rad = I * DEG, O_rad = O * DEG, w_rad = w * DEG;
+  let E = M + e * Math.sin(M);
+  for (let i = 0; i < 15; i++) {
+    const dE = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+    E -= dE;
+    if (Math.abs(dE) < 1e-10) break;
+  }
+
+  const xp = a * (Math.cos(E) - e);
+  const yp = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
+
+  const cw = Math.cos(w_rad), sw = Math.sin(w_rad);
+  const cO = Math.cos(O_rad), sO = Math.sin(O_rad);
+  const cI = Math.cos(I_rad), sI = Math.sin(I_rad);
+
+  const x = (cw * cO - sw * sO * cI) * xp + (-sw * cO - cw * sO * cI) * yp;
+  const y = (cw * sO + sw * cO * cI) * xp + (-sw * sO + cw * cO * cI) * yp;
+  const z = (sw * sI) * xp + (cw * sI) * yp;
+  const r = Math.sqrt(x * x + y * y + z * z);
+  const v = Math.sqrt(GM_SUN * (2 / (r * AU_KM) - 1 / (a * AU_KM)));
+
+  return { x, y, z, r, a, e, I, v, periodYr: P };
+}
+
+function makeCometOrbit(comet, n = 360) {
+  const { a, e, I, O, w } = comet;
+  const I_rad = I * DEG, O_rad = O * DEG, w_rad = w * DEG;
+  const cw = Math.cos(w_rad), sw = Math.sin(w_rad);
+  const cO = Math.cos(O_rad), sO = Math.sin(O_rad);
+  const cI = Math.cos(I_rad), sI = Math.sin(I_rad);
+  const v = new THREE.Vector3(), arr = [];
+  for (let i = 0; i <= n; i++) {
+    const E = (i / n) * 2 * Math.PI;
+    const xp = a * (Math.cos(E) - e);
+    const yp = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
+    const x = (cw * cO - sw * sO * cI) * xp + (-sw * cO - cw * sO * cI) * yp;
+    const y = (cw * sO + sw * cO * cI) * xp + (-sw * sO + cw * cO * cI) * yp;
+    const z = (sw * sI) * xp + (cw * sI) * yp;
+    arr.push(eclToWorld(x, y, z, v).clone());
+  }
+  const g = new THREE.BufferGeometry().setFromPoints(arr);
+  return new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: 0x4df0ff, transparent: true, opacity: 0.55 }));
+}
+
+/* 解算深空探测器日心坐标(au)与任务物理量 */
+function probeState(probe, jdt) {
+  if (probe.orbit) {
+    const s = cometState(probe.orbit, jdt);
+    return { ...s, name: probe.name, key: probe.key };
+  }
+
+  const fb = probe.flybys;
+  const asymp = probe.asymptotic;
+  const lastFb = fb[fb.length - 1];
+
+  let x = 0, y = 0, z = 0;
+  if (jdt < fb[0].jd) {
+    const p0 = fb[0];
+    const r = p0.r, lon = p0.lon * DEG, lat = p0.lat * DEG;
+    x = r * Math.cos(lat) * Math.cos(lon);
+    y = r * Math.cos(lat) * Math.sin(lon);
+    z = r * Math.sin(lat);
+  } else if (jdt >= lastFb.jd) {
+    const dtYears = (jdt - lastFb.jd) / 365.25;
+    const rLast = lastFb.r, lonLast = lastFb.lon * DEG, latLast = lastFb.lat * DEG;
+    const xLast = rLast * Math.cos(latLast) * Math.cos(lonLast);
+    const yLast = rLast * Math.cos(latLast) * Math.sin(lonLast);
+    const zLast = rLast * Math.sin(latLast);
+
+    const asympLon = asymp.eclLon * DEG, asympLat = asymp.eclLat * DEG;
+    const vx = asymp.speedAUPerYr * Math.cos(asympLat) * Math.cos(asympLon);
+    const vy = asymp.speedAUPerYr * Math.cos(asympLat) * Math.sin(asympLon);
+    const vz = asymp.speedAUPerYr * Math.sin(asympLat);
+
+    x = xLast + vx * dtYears;
+    y = yLast + vy * dtYears;
+    z = zLast + vz * dtYears;
+  } else {
+    let idx = 0;
+    while (idx < fb.length - 1 && jdt > fb[idx + 1].jd) idx++;
+    const f0 = fb[idx], f1 = fb[idx + 1];
+    const u = (jdt - f0.jd) / (f1.jd - f0.jd);
+    const smoothU = u * u * (3 - 2 * u);
+
+    const r0 = f0.r, lon0 = f0.lon * DEG, lat0 = f0.lat * DEG;
+    const r1 = f1.r, lon1 = f1.lon * DEG, lat1 = f1.lat * DEG;
+
+    const x0 = r0 * Math.cos(lat0) * Math.cos(lon0), y0 = r0 * Math.cos(lat0) * Math.sin(lon0), z0 = r0 * Math.sin(lat0);
+    const x1 = r1 * Math.cos(lat1) * Math.cos(lon1), y1 = r1 * Math.cos(lat1) * Math.sin(lon1), z1 = r1 * Math.sin(lat1);
+
+    x = x0 + (x1 - x0) * smoothU;
+    y = y0 + (y1 - y0) * smoothU;
+    z = z0 + (z1 - z0) * smoothU;
+  }
+
+  const r = Math.sqrt(x * x + y * y + z * z);
+  const v = asymp ? asymp.speedAUPerYr * (AU_KM / (365.25 * 86400)) : 16.0;
+
+  return { x, y, z, r, v, name: probe.name, key: probe.key };
+}
+
+function makeProbeTrajectory(probe, n = 300) {
+  if (probe.orbit) {
+    const l = makeCometOrbit(probe.orbit, 240);
+    l.material.color.setHex(0xffaa33);
+    return l;
+  }
+
+  const v = new THREE.Vector3(), pts = [];
+  const startJD = probe.launchJD;
+  const endJD = dateToJD(new Date('2035-01-01'));
+  for (let i = 0; i <= n; i++) {
+    const tj = startJD + (i / n) * (endJD - startJD);
+    const s = probeState(probe, tj);
+    pts.push(eclToWorld(s.x, s.y, s.z, v).clone());
+  }
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  return new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xffd152, transparent: true, opacity: 0.5 }));
+}
+
+
 
 /* ====================== src/js/05-scene.js ====================== */
 /* ===== 场景 / 相机 / 渲染器 / Bloom 管线 =====
@@ -1095,6 +1424,8 @@ const planetMeshes = []; // 用于 raycaster
 const orbitObjs = [];
 const labelObjs = [];
 const moons = [];        // 卫星 {data, moonPos, mesh, M0}
+const comets = [];       // 彗星 {data, holder, mesh, ...}
+const probes = [];       // 探测器 {data, holder, mesh, ...}
 let asteroidBelt = null;
 let sunPhase = 0;        // 太阳表面动画相位（独立于仿真时钟）
 let daysPerSec = 5;      // 时间速率：每真实秒推进的天数
@@ -1105,7 +1436,7 @@ const segHi = 64, segLo = 48;
 
 async function build() {
   const N = makePerlin(2024);
-  const total = PLANETS.length + 2;
+  const total = PLANETS.length + 2 + 1 + PROBES.length;
   let step = 0;
   const tick = async (txt) => { loadStatus.textContent = txt; loadBar.style.width = `${(++step / total) * 100}%`; await nextFrame(); await nextFrame(); };
 
@@ -1223,6 +1554,43 @@ async function build() {
     const s0 = planetState(p.key, jd);
     eclToWorld(s0.x, s0.y, s0.z, tmpV);
     planetPos.position.copy(tmpV);
+  }
+
+  // --- 哈雷彗星 (1P/Halley) ---
+  await tick('绘制轨道与彗尾：哈雷彗星…');
+  const cometOrbit = makeCometOrbit(COMET_HALLEY);
+  scene.add(cometOrbit); orbitObjs.push(cometOrbit);
+  const cometObj = createComet(COMET_HALLEY, N);
+  scene.add(cometObj.holder);
+  planetMeshes.push(cometObj.mesh);
+
+  const cometLabel = makeLabel(COMET_HALLEY.name);
+  cometLabel.userData = { holder: cometObj.holder, radius: COMET_HALLEY.radius };
+  scene.add(cometLabel); labelObjs.push(cometLabel);
+
+  const sComet0 = cometState(COMET_HALLEY, jd);
+  eclToWorld(sComet0.x, sComet0.y, sComet0.z, tmpV);
+  cometObj.holder.position.copy(tmpV);
+  comets.push({ data: COMET_HALLEY, ...cometObj, orbitLine: cometOrbit });
+
+  // --- 人类深空探测器 (Voyager 1/2, New Horizons, Parker) ---
+  for (const pr of PROBES) {
+    await tick(`定位深空探测器：${pr.name}…`);
+    const trajLine = makeProbeTrajectory(pr);
+    scene.add(trajLine); orbitObjs.push(trajLine);
+
+    const probeObj = createProbe(pr);
+    scene.add(probeObj.holder);
+    planetMeshes.push(probeObj.mesh);
+
+    const probeLabel = makeLabel(pr.name);
+    probeLabel.userData = { holder: probeObj.holder, radius: pr.radius };
+    scene.add(probeLabel); labelObjs.push(probeLabel);
+
+    const sProbe0 = probeState(pr, jd);
+    eclToWorld(sProbe0.x, sProbe0.y, sProbe0.z, tmpV);
+    probeObj.holder.position.copy(tmpV);
+    probes.push({ data: pr, ...probeObj, trajectoryLine: trajLine });
   }
 
   // --- 小行星带（主带，火-木之间 2.1–3.3 au，示意模式下显示） ---
@@ -1381,6 +1749,27 @@ function makeRing(radius, N) {
     uv.setXY(i, (r - inner) / (outer - inner), 0.5);
   }
   const mat = new THREE.MeshBasicMaterial({ map: texSaturnRing(N), side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthWrite: false });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uPlanetCenter = { value: new THREE.Vector3() };
+    shader.uniforms.uPlanetRadius = { value: radius };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldP;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uPlanetCenter;\nuniform float uPlanetRadius;\nvarying vec3 vWorldP;')
+      .replace('#include <dithering_fragment>',
+        `#include <dithering_fragment>
+         vec3 sunDir = normalize(-uPlanetCenter);
+         vec3 toRing = vWorldP - uPlanetCenter;
+         float proj = dot(toRing, -sunDir);
+         if (proj > 0.0) {
+           vec3 perp = toRing - proj * (-sunDir);
+           float d = length(perp);
+           float shadow = smoothstep(uPlanetRadius * 0.92, uPlanetRadius * 1.05, d);
+           gl_FragColor.rgb *= mix(0.15, 1.0, shadow);
+         }`);
+    mat.userData.shader = shader;
+  };
   const ring = new THREE.Mesh(geo, mat);
   ring.rotation.x = Math.PI / 2;
   return ring;
@@ -1650,6 +2039,230 @@ function genPlanetTexture(p, N) {
   }
 }
 
+/* ---- 哈雷彗星 3D 实体与动态彗尾 ---- */
+function createComet(comet, N) {
+  const holder = new THREE.Group();
+
+  // 彗核：深黑灰色不规则表面
+  const geom = new THREE.DodecahedronGeometry(comet.radius, 1);
+  const pos = geom.attributes.position;
+  let s = 98765;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < pos.count; i++) {
+    const k = 0.65 + rnd() * 0.7;
+    pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * (0.6 + rnd() * 0.4), pos.getZ(i) * k);
+  }
+  pos.needsUpdate = true;
+  geom.computeVertexNormals();
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x222426,
+    roughness: 0.95,
+    metalness: 0.05,
+    flatShading: true
+  });
+  const nucleus = new THREE.Mesh(geom, mat);
+  nucleus.userData = { ...comet, isComet: true, holder };
+  holder.add(nucleus);
+
+  // 彗发 (Coma)：核周围发光的球形气体云
+  const comaMat = new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(0x6ef0ff) },
+      opacity: { value: 0.7 }
+    },
+    vertexShader: `
+      varying vec3 vN; varying vec3 vP;
+      void main() {
+        vN = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vP = mv.xyz;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float opacity;
+      varying vec3 vN; varying vec3 vP;
+      void main() {
+        float f = pow(1.0 - max(dot(vN, normalize(-vP)), 0.0), 2.2);
+        gl_FragColor = vec4(color, f * opacity);
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    side: THREE.BackSide,
+    depthWrite: false
+  });
+  const coma = new THREE.Mesh(new THREE.SphereGeometry(comet.radius * 2.4, 24, 24), comaMat);
+  coma.layers.enable(BLOOM_LAYER);
+  holder.add(coma);
+
+  // 彗尾组：离子尾 (Ion Tail) + 尘埃尾 (Dust Tail)
+  const tailGroup = new THREE.Group();
+  holder.add(tailGroup);
+
+  // 离子尾 (窄长、笔直背向太阳，荧光蓝)
+  const ionGeo = new THREE.ConeGeometry(comet.radius * 1.3, 22, 24, 1, true);
+  ionGeo.translate(0, 11, 0);
+  ionGeo.rotateX(Math.PI / 2);
+  const ionMat = new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(0x35d8ff) },
+      uAlpha: { value: 0.8 }
+    },
+    vertexShader: `
+      varying float vDist;
+      void main() {
+        vDist = position.z / 22.0;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float uAlpha;
+      varying float vDist;
+      void main() {
+        float fade = smoothstep(0.0, 0.12, vDist) * smoothstep(1.0, 0.2, vDist);
+        gl_FragColor = vec4(color * (1.0 + (1.0 - vDist) * 1.6), fade * uAlpha);
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const ionTail = new THREE.Mesh(ionGeo, ionMat);
+  ionTail.layers.enable(BLOOM_LAYER);
+  tailGroup.add(ionTail);
+
+  // 尘埃尾 (略弯、宽泛、米白色/金黄色)
+  const dustGeo = new THREE.ConeGeometry(comet.radius * 2.6, 17, 24, 1, true);
+  dustGeo.translate(0, 8.5, 0);
+  dustGeo.rotateX(Math.PI / 2);
+  dustGeo.rotateY(0.12);
+  const dustMat = new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(0xffe2a0) },
+      uAlpha: { value: 0.5 }
+    },
+    vertexShader: `
+      varying float vDist;
+      void main() {
+        vDist = position.z / 17.0;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float uAlpha;
+      varying float vDist;
+      void main() {
+        float fade = smoothstep(0.0, 0.1, vDist) * smoothstep(1.0, 0.28, vDist);
+        gl_FragColor = vec4(color, fade * uAlpha);
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const dustTail = new THREE.Mesh(dustGeo, dustMat);
+  dustTail.layers.enable(BLOOM_LAYER);
+  tailGroup.add(dustTail);
+
+  return {
+    holder,
+    mesh: nucleus,
+    coma,
+    tailGroup,
+    ionTail,
+    dustTail,
+    ionMat,
+    dustMat,
+    comaMat
+  };
+}
+
+/* ---- 深空探测器 3D 实体创建 ---- */
+function createProbe(probe) {
+  const holder = new THREE.Group();
+  const probeGroup = new THREE.Group();
+  holder.add(probeGroup);
+
+  // 1. 金色高增益抛物面雷达天线
+  const dishGeo = new THREE.SphereGeometry(0.55, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.45);
+  const dishMat = new THREE.MeshStandardMaterial({
+    color: 0xffcc00,
+    metalness: 0.85,
+    roughness: 0.2,
+    side: THREE.DoubleSide
+  });
+  const dish = new THREE.Mesh(dishGeo, dishMat);
+  dish.rotation.x = Math.PI / 2;
+  probeGroup.add(dish);
+
+  // 副天线反射器支架
+  const subGeo = new THREE.ConeGeometry(0.12, 0.35, 8);
+  const subMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.5, roughness: 0.3 });
+  const sub = new THREE.Mesh(subGeo, subMat);
+  sub.position.z = 0.32;
+  sub.rotation.x = Math.PI / 2;
+  probeGroup.add(sub);
+
+  // 2. 探测器主体总成
+  const bodyGeo = new THREE.CylinderGeometry(0.26, 0.3, 0.38, 10);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xdddddd,
+    metalness: 0.3,
+    roughness: 0.6
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.z = -0.22;
+  body.rotation.x = Math.PI / 2;
+  probeGroup.add(body);
+
+  // 3. RTG 伸展吊臂
+  const boomGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.1, 6);
+  const boomMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.5 });
+  const boom = new THREE.Mesh(boomGeo, boomMat);
+  boom.position.set(0.6, 0, -0.22);
+  boom.rotation.z = Math.PI / 3;
+  probeGroup.add(boom);
+
+  const rtgGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.32, 8);
+  const rtgMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.4, roughness: 0.8 });
+  const rtg = new THREE.Mesh(rtgGeo, rtgMat);
+  rtg.position.set(1.05, 0.24, -0.22);
+  probeGroup.add(rtg);
+
+  // 4. 定位光圈 (便于远景选中)
+  const haloGeo = new THREE.RingGeometry(0.65, 0.75, 24);
+  const haloMat = new THREE.MeshBasicMaterial({
+    color: 0xffd54f,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.45
+  });
+  const halo = new THREE.Mesh(haloGeo, haloMat);
+  probeGroup.add(halo);
+
+  // 5. 点击拾取的透明球体
+  const hitGeo = new THREE.SphereGeometry(1.5, 8, 8);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+  hitMesh.userData = { ...probe, isProbe: true, holder, probeGroup, halo };
+  holder.add(hitMesh);
+
+  return {
+    holder,
+    mesh: hitMesh,
+    probeGroup,
+    halo
+  };
+}
+
+
 
 /* ====================== src/js/08-interaction.js ====================== */
 /* ===== 交互：悬停 / 点击聚焦 / 详细面板 =====
@@ -1702,7 +2315,8 @@ function focusOn(mesh) {
   let dir = camera.position.clone().sub(tp);
   if (dir.length() < 0.001) dir.set(1, 0.4, 0.8);
   dir.normalize();
-  const dist = Math.max(r * 4.5, camera.near * 4);
+  const distMultiplier = mesh.userData.isProbe ? 7.5 : mesh.userData.isComet ? 6.5 : 4.5;
+  const dist = Math.max(r * distMultiplier, camera.near * 4);
   animateCamera(tp.clone().add(dir.multiplyScalar(dist)), tp.clone());
   showDetail(mesh.userData);
   focusInfo.classList.remove('show');
@@ -1780,6 +2394,41 @@ function updateLive() {
       + `<div class="d-note">采用真实开普勒根数(a,e,i,周期)；真实比例下为真实星-卫距离，示意模式下半长轴压缩显示。</div>`;
     return;
   }
+  if (d.isComet) {
+    const s = cometState(d, jd);
+    const es = planetState('earth', jd);
+    const dx = s.x - es.x, dy = s.y - es.y, dz = s.z - es.z;
+    const dE = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const act = s.r < 4.0 ? '🔥 活跃期（升华爆发/双彗尾）' : '❄️ 冰冻休眠态（无显著彗尾）';
+    live.innerHTML = row('日心距 r', s.r.toFixed(4) + ' au')
+      + row('≈', (s.r * AU_KM / 1e8).toFixed(3) + ' 亿 km')
+      + row('轨道速度', s.v.toFixed(2) + ' km/s')
+      + row('距地球', dE.toFixed(4) + ' au (' + (dE * AU_KM / 1e8).toFixed(3) + ' 亿 km)')
+      + row('升华活性', act)
+      + row('轨道周期', s.periodYr.toFixed(2) + ' 年 (逆行)')
+      + `<div class="d-note">哈雷彗星高度偏心椭圆轨道 (e=0.967)，由 JPL 历元参数与开普勒方程实时解算。彗尾动态背向太阳。</div>`;
+    return;
+  }
+  if (d.isProbe) {
+    const s = probeState(d, jd);
+    const es = planetState('earth', jd);
+    const dx = s.x - es.x, dy = s.y - es.y, dz = s.z - es.z;
+    const dE = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const lightSec = (dE * AU_KM) / 299792.458;
+    const fmtTime = (sec) => {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const ss = Math.floor(sec % 60);
+      return (h > 0 ? h + ' 小时 ' : '') + m + ' 分 ' + ss + ' 秒';
+    };
+    live.innerHTML = row('距太阳', s.r.toFixed(3) + ' au (' + (s.r * AU_KM / 1e8).toFixed(3) + ' 亿 km)')
+      + row('距地球', dE.toFixed(3) + ' au (' + (dE * AU_KM / 1e8).toFixed(3) + ' 亿 km)')
+      + row('巡航航速', s.v.toFixed(2) + ' km/s')
+      + row('单程光时', fmtTime(lightSec))
+      + row('双向延迟(RTT)', fmtTime(lightSec * 2))
+      + `<div class="d-note">深空轨道插值自引力弹弓与双曲线逃逸轨迹，天线自动指向地球通讯。</div>`;
+    return;
+  }
   live.innerHTML = '';
 }
 
@@ -1810,6 +2459,125 @@ function fillTooltip(d) {
      <span class="tt-tag">${d.tag}</span>${rows}
      <div class="tt-desc">${d.desc}</div>`;
 }
+
+// ---------- 天体与探测器快捷搜索 / 焦点漫游 (Spotlight Search) ----------
+const searchInput = document.getElementById('celestial-search');
+const searchResults = document.getElementById('search-results');
+
+function getAllSearchTargets() {
+  const list = [];
+  if (sunMesh) list.push({ name: '太阳', en: 'Sun', tag: '恒星', mesh: sunMesh });
+  for (const p of PLANETS) {
+    if (p._mesh) list.push({ name: p.name, en: p.en, tag: '行星', mesh: p._mesh });
+  }
+  for (const m of moons) {
+    list.push({ name: m.data.name, en: m.data.en, tag: '卫星', mesh: m.mesh });
+  }
+  for (const c of comets) {
+    list.push({ name: c.data.name, en: c.data.en, tag: '彗星', mesh: c.mesh });
+  }
+  for (const pr of probes) {
+    list.push({ name: pr.data.name, en: pr.data.en, tag: '深空探测器', mesh: pr.mesh });
+  }
+  return list;
+}
+
+if (searchInput && searchResults) {
+  let activeIdx = -1;
+  let currentFiltered = [];
+
+  function renderSearch(query) {
+    query = (query || '').trim().toLowerCase();
+    const all = getAllSearchTargets();
+    currentFiltered = query ? all.filter(item =>
+      item.name.toLowerCase().includes(query) ||
+      item.en.toLowerCase().includes(query) ||
+      item.tag.toLowerCase().includes(query)
+    ) : all.slice(0, 10);
+
+    activeIdx = currentFiltered.length > 0 ? 0 : -1;
+    if (currentFiltered.length === 0) {
+      searchResults.innerHTML = `<div class="search-empty">无匹配天体或探测器</div>`;
+      searchResults.classList.add('show');
+      return;
+    }
+
+    searchResults.innerHTML = currentFiltered.map((item, idx) => `
+      <div class="search-item ${idx === activeIdx ? 'active' : ''}" data-idx="${idx}">
+        <div class="search-item-info">
+          <span class="search-item-name">${item.name}</span>
+          <span class="search-item-en">${item.en}</span>
+        </div>
+        <span class="search-item-tag">${item.tag}</span>
+      </div>
+    `).join('');
+    searchResults.classList.add('show');
+
+    searchResults.querySelectorAll('.search-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.getAttribute('data-idx'), 10);
+        selectSearchResult(idx);
+      });
+    });
+  }
+
+  function selectSearchResult(idx) {
+    if (idx >= 0 && idx < currentFiltered.length) {
+      const item = currentFiltered[idx];
+      focusOn(item.mesh);
+      searchResults.classList.remove('show');
+      searchInput.value = '';
+      searchInput.blur();
+    }
+  }
+
+  searchInput.addEventListener('input', (e) => renderSearch(e.target.value));
+  searchInput.addEventListener('focus', () => renderSearch(searchInput.value));
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (currentFiltered.length > 0) {
+        activeIdx = (activeIdx + 1) % currentFiltered.length;
+        updateActiveSearchItem();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (currentFiltered.length > 0) {
+        activeIdx = (activeIdx - 1 + currentFiltered.length) % currentFiltered.length;
+        updateActiveSearchItem();
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      selectSearchResult(activeIdx);
+    } else if (e.key === 'Escape') {
+      searchResults.classList.remove('show');
+      searchInput.blur();
+    }
+  });
+
+  function updateActiveSearchItem() {
+    searchResults.querySelectorAll('.search-item').forEach((el, idx) => {
+      el.classList.toggle('active', idx === activeIdx);
+    });
+    const activeEl = searchResults.querySelector('.search-item.active');
+    if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-box')) {
+      searchResults.classList.remove('show');
+    }
+  });
+
+  addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement !== searchInput && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault();
+      searchInput.focus();
+    }
+  });
+}
+
 
 
 /* ====================== src/js/09-controls.js ====================== */
@@ -1886,6 +2654,22 @@ function setScaleMode(mode) {
     if (!item.orbitLine) continue;
     item.orbitLine.geometry.dispose();
     item.orbitLine.geometry = makeMoonOrbitGeom(item.data);
+  }
+  // 彗星轨道线随比例模式重建
+  for (const c of comets) {
+    if (!c.orbitLine) continue;
+    const tmp = makeCometOrbit(c.data);
+    c.orbitLine.geometry.dispose();
+    c.orbitLine.geometry = tmp.geometry;
+    tmp.material.dispose();
+  }
+  // 探测器轨道线随比例模式重建
+  for (const pr of probes) {
+    if (!pr.trajectoryLine) continue;
+    const tmp = makeProbeTrajectory(pr.data);
+    pr.trajectoryLine.geometry.dispose();
+    pr.trajectoryLine.geometry = tmp.geometry;
+    tmp.material.dispose();
   }
   // 小行星带仅在示意模式（其位置为示意单位）
   if (asteroidBelt) asteroidBelt.mesh.visible = (mode === 'schematic');
@@ -2031,6 +2815,56 @@ function animate() {
       item.moonPos.position.copy(tmpV);
       item.mesh.rotation.y = ((elapsed / m.periodD) * 2 * Math.PI) % (2 * Math.PI);  // 潮汐锁定近似
     }
+
+    // 哈雷彗星：轨道与动态彗尾朝向
+    for (const c of comets) {
+      const s = cometState(c.data, jd);
+      eclToWorld(s.x, s.y, s.z, tmpV);
+      c.holder.position.copy(tmpV);
+      c.data._state = s;
+
+      // 彗尾永远背向太阳：从太阳 (原点) 指向彗星
+      const sunToComet = tmpV.clone().normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), sunToComet);
+      c.tailGroup.quaternion.copy(q);
+
+      // 彗星活性：越靠近太阳升华越强 (近日点 0.59 AU，活动范围 < 4 AU)
+      const rAU = s.r;
+      const activity = clamp((4.0 - rAU) / 3.41, 0, 1);
+      const tailLen = activity * (scaleMode === 'true' ? 65 : 30) + 0.1;
+      c.tailGroup.scale.set(activity * 1.6 + 0.2, activity * 1.6 + 0.2, tailLen);
+      if (c.ionMat) c.ionMat.uniforms.uAlpha.value = activity * 0.85;
+      if (c.dustMat) c.dustMat.uniforms.uAlpha.value = activity * 0.55;
+      if (c.comaMat) c.comaMat.uniforms.opacity.value = 0.2 + activity * 0.7;
+    }
+
+    // 深空探测器：轨迹位置更新与天线对准地球
+    const earthObj = PLANETS.find(p => p.key === 'earth');
+    const earthPos = earthObj && earthObj._planetPos ? earthObj._planetPos.position : new THREE.Vector3();
+    for (const pr of probes) {
+      const s = probeState(pr.data, jd);
+      eclToWorld(s.x, s.y, s.z, tmpV);
+      pr.holder.position.copy(tmpV);
+      pr.data._state = s;
+
+      if (pr.probeGroup) {
+        const toEarth = earthPos.clone().sub(tmpV).normalize();
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), toEarth);
+        pr.probeGroup.quaternion.copy(q);
+      }
+      if (pr.halo) {
+        const pulse = 1.0 + Math.sin(sunPhase * 3.5) * 0.2;
+        pr.halo.scale.setScalar(pulse);
+      }
+    }
+
+    // 土星环投射阴影：传入土星世界坐标
+    const saturnObj = PLANETS.find(p => p.key === 'saturn');
+    if (saturnObj && saturnObj._ringMesh && saturnObj._ringMesh.material.userData.shader) {
+      saturnObj._ringMesh.getWorldPosition(tmpV);
+      saturnObj._ringMesh.material.userData.shader.uniforms.uPlanetCenter.value.copy(tmpV);
+    }
+
     if (asteroidBelt) asteroidBelt.tick(elapsed * 0.02);
   }
 

@@ -46,6 +46,56 @@ function animate() {
       item.moonPos.position.copy(tmpV);
       item.mesh.rotation.y = ((elapsed / m.periodD) * 2 * Math.PI) % (2 * Math.PI);  // 潮汐锁定近似
     }
+
+    // 哈雷彗星：轨道与动态彗尾朝向
+    for (const c of comets) {
+      const s = cometState(c.data, jd);
+      eclToWorld(s.x, s.y, s.z, tmpV);
+      c.holder.position.copy(tmpV);
+      c.data._state = s;
+
+      // 彗尾永远背向太阳：从太阳 (原点) 指向彗星
+      const sunToComet = tmpV.clone().normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), sunToComet);
+      c.tailGroup.quaternion.copy(q);
+
+      // 彗星活性：越靠近太阳升华越强 (近日点 0.59 AU，活动范围 < 4 AU)
+      const rAU = s.r;
+      const activity = clamp((4.0 - rAU) / 3.41, 0, 1);
+      const tailLen = activity * (scaleMode === 'true' ? 65 : 30) + 0.1;
+      c.tailGroup.scale.set(activity * 1.6 + 0.2, activity * 1.6 + 0.2, tailLen);
+      if (c.ionMat) c.ionMat.uniforms.uAlpha.value = activity * 0.85;
+      if (c.dustMat) c.dustMat.uniforms.uAlpha.value = activity * 0.55;
+      if (c.comaMat) c.comaMat.uniforms.opacity.value = 0.2 + activity * 0.7;
+    }
+
+    // 深空探测器：轨迹位置更新与天线对准地球
+    const earthObj = PLANETS.find(p => p.key === 'earth');
+    const earthPos = earthObj && earthObj._planetPos ? earthObj._planetPos.position : new THREE.Vector3();
+    for (const pr of probes) {
+      const s = probeState(pr.data, jd);
+      eclToWorld(s.x, s.y, s.z, tmpV);
+      pr.holder.position.copy(tmpV);
+      pr.data._state = s;
+
+      if (pr.probeGroup) {
+        const toEarth = earthPos.clone().sub(tmpV).normalize();
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), toEarth);
+        pr.probeGroup.quaternion.copy(q);
+      }
+      if (pr.halo) {
+        const pulse = 1.0 + Math.sin(sunPhase * 3.5) * 0.2;
+        pr.halo.scale.setScalar(pulse);
+      }
+    }
+
+    // 土星环投射阴影：传入土星世界坐标
+    const saturnObj = PLANETS.find(p => p.key === 'saturn');
+    if (saturnObj && saturnObj._ringMesh && saturnObj._ringMesh.material.userData.shader) {
+      saturnObj._ringMesh.getWorldPosition(tmpV);
+      saturnObj._ringMesh.material.userData.shader.uniforms.uPlanetCenter.value.copy(tmpV);
+    }
+
     if (asteroidBelt) asteroidBelt.tick(elapsed * 0.02);
   }
 

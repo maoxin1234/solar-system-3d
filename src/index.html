@@ -17,8 +17,18 @@
   </div>
 
   <div id="header">
-    <h1>太阳系 · SOLAR SYSTEM</h1>
-    <p>JPL 星历驱动 · J2000 历元 · 开普勒轨道</p>
+    <div class="h-main">
+      <h1>太阳系 · SOLAR SYSTEM</h1>
+      <p>JPL 星历驱动 · J2000 历元 · 开普勒轨道 · 哈雷彗星 · 深空探测器</p>
+    </div>
+    <div class="search-box">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="celestial-search" placeholder="搜索天体、彗星、探测器... (/)" autocomplete="off" spellcheck="false">
+        <kbd class="search-kbd">/</kbd>
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </div>
     <button id="btn-about">ⓘ 精度与数据说明</button>
   </div>
 

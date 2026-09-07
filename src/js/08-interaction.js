@@ -48,7 +48,8 @@ function focusOn(mesh) {
   let dir = camera.position.clone().sub(tp);
   if (dir.length() < 0.001) dir.set(1, 0.4, 0.8);
   dir.normalize();
-  const dist = Math.max(r * 4.5, camera.near * 4);
+  const distMultiplier = mesh.userData.isProbe ? 7.5 : mesh.userData.isComet ? 6.5 : 4.5;
+  const dist = Math.max(r * distMultiplier, camera.near * 4);
   animateCamera(tp.clone().add(dir.multiplyScalar(dist)), tp.clone());
   showDetail(mesh.userData);
   focusInfo.classList.remove('show');
@@ -126,6 +127,41 @@ function updateLive() {
       + `<div class="d-note">采用真实开普勒根数(a,e,i,周期)；真实比例下为真实星-卫距离，示意模式下半长轴压缩显示。</div>`;
     return;
   }
+  if (d.isComet) {
+    const s = cometState(d, jd);
+    const es = planetState('earth', jd);
+    const dx = s.x - es.x, dy = s.y - es.y, dz = s.z - es.z;
+    const dE = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const act = s.r < 4.0 ? '🔥 活跃期（升华爆发/双彗尾）' : '❄️ 冰冻休眠态（无显著彗尾）';
+    live.innerHTML = row('日心距 r', s.r.toFixed(4) + ' au')
+      + row('≈', (s.r * AU_KM / 1e8).toFixed(3) + ' 亿 km')
+      + row('轨道速度', s.v.toFixed(2) + ' km/s')
+      + row('距地球', dE.toFixed(4) + ' au (' + (dE * AU_KM / 1e8).toFixed(3) + ' 亿 km)')
+      + row('升华活性', act)
+      + row('轨道周期', s.periodYr.toFixed(2) + ' 年 (逆行)')
+      + `<div class="d-note">哈雷彗星高度偏心椭圆轨道 (e=0.967)，由 JPL 历元参数与开普勒方程实时解算。彗尾动态背向太阳。</div>`;
+    return;
+  }
+  if (d.isProbe) {
+    const s = probeState(d, jd);
+    const es = planetState('earth', jd);
+    const dx = s.x - es.x, dy = s.y - es.y, dz = s.z - es.z;
+    const dE = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const lightSec = (dE * AU_KM) / 299792.458;
+    const fmtTime = (sec) => {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const ss = Math.floor(sec % 60);
+      return (h > 0 ? h + ' 小时 ' : '') + m + ' 分 ' + ss + ' 秒';
+    };
+    live.innerHTML = row('距太阳', s.r.toFixed(3) + ' au (' + (s.r * AU_KM / 1e8).toFixed(3) + ' 亿 km)')
+      + row('距地球', dE.toFixed(3) + ' au (' + (dE * AU_KM / 1e8).toFixed(3) + ' 亿 km)')
+      + row('巡航航速', s.v.toFixed(2) + ' km/s')
+      + row('单程光时', fmtTime(lightSec))
+      + row('双向延迟(RTT)', fmtTime(lightSec * 2))
+      + `<div class="d-note">深空轨道插值自引力弹弓与双曲线逃逸轨迹，天线自动指向地球通讯。</div>`;
+    return;
+  }
   live.innerHTML = '';
 }
 
@@ -156,4 +192,123 @@ function fillTooltip(d) {
      <span class="tt-tag">${d.tag}</span>${rows}
      <div class="tt-desc">${d.desc}</div>`;
 }
+
+// ---------- 天体与探测器快捷搜索 / 焦点漫游 (Spotlight Search) ----------
+const searchInput = document.getElementById('celestial-search');
+const searchResults = document.getElementById('search-results');
+
+function getAllSearchTargets() {
+  const list = [];
+  if (sunMesh) list.push({ name: '太阳', en: 'Sun', tag: '恒星', mesh: sunMesh });
+  for (const p of PLANETS) {
+    if (p._mesh) list.push({ name: p.name, en: p.en, tag: '行星', mesh: p._mesh });
+  }
+  for (const m of moons) {
+    list.push({ name: m.data.name, en: m.data.en, tag: '卫星', mesh: m.mesh });
+  }
+  for (const c of comets) {
+    list.push({ name: c.data.name, en: c.data.en, tag: '彗星', mesh: c.mesh });
+  }
+  for (const pr of probes) {
+    list.push({ name: pr.data.name, en: pr.data.en, tag: '深空探测器', mesh: pr.mesh });
+  }
+  return list;
+}
+
+if (searchInput && searchResults) {
+  let activeIdx = -1;
+  let currentFiltered = [];
+
+  function renderSearch(query) {
+    query = (query || '').trim().toLowerCase();
+    const all = getAllSearchTargets();
+    currentFiltered = query ? all.filter(item =>
+      item.name.toLowerCase().includes(query) ||
+      item.en.toLowerCase().includes(query) ||
+      item.tag.toLowerCase().includes(query)
+    ) : all.slice(0, 10);
+
+    activeIdx = currentFiltered.length > 0 ? 0 : -1;
+    if (currentFiltered.length === 0) {
+      searchResults.innerHTML = `<div class="search-empty">无匹配天体或探测器</div>`;
+      searchResults.classList.add('show');
+      return;
+    }
+
+    searchResults.innerHTML = currentFiltered.map((item, idx) => `
+      <div class="search-item ${idx === activeIdx ? 'active' : ''}" data-idx="${idx}">
+        <div class="search-item-info">
+          <span class="search-item-name">${item.name}</span>
+          <span class="search-item-en">${item.en}</span>
+        </div>
+        <span class="search-item-tag">${item.tag}</span>
+      </div>
+    `).join('');
+    searchResults.classList.add('show');
+
+    searchResults.querySelectorAll('.search-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.getAttribute('data-idx'), 10);
+        selectSearchResult(idx);
+      });
+    });
+  }
+
+  function selectSearchResult(idx) {
+    if (idx >= 0 && idx < currentFiltered.length) {
+      const item = currentFiltered[idx];
+      focusOn(item.mesh);
+      searchResults.classList.remove('show');
+      searchInput.value = '';
+      searchInput.blur();
+    }
+  }
+
+  searchInput.addEventListener('input', (e) => renderSearch(e.target.value));
+  searchInput.addEventListener('focus', () => renderSearch(searchInput.value));
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (currentFiltered.length > 0) {
+        activeIdx = (activeIdx + 1) % currentFiltered.length;
+        updateActiveSearchItem();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (currentFiltered.length > 0) {
+        activeIdx = (activeIdx - 1 + currentFiltered.length) % currentFiltered.length;
+        updateActiveSearchItem();
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      selectSearchResult(activeIdx);
+    } else if (e.key === 'Escape') {
+      searchResults.classList.remove('show');
+      searchInput.blur();
+    }
+  });
+
+  function updateActiveSearchItem() {
+    searchResults.querySelectorAll('.search-item').forEach((el, idx) => {
+      el.classList.toggle('active', idx === activeIdx);
+    });
+    const activeEl = searchResults.querySelector('.search-item.active');
+    if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-box')) {
+      searchResults.classList.remove('show');
+    }
+  });
+
+  addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement !== searchInput && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault();
+      searchInput.focus();
+    }
+  });
+}
+
 

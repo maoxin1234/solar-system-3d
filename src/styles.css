@@ -30,15 +30,72 @@
   #loading .bar { margin-top: 16px; width: 240px; height: 3px; background: rgba(255,255,255,.08); border-radius: 3px; overflow: hidden; }
   #loading .bar i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg,#4a82ff,#9cc0ff); transition: width .3s ease; }
 
-  /* ===== 标题 ===== */
+  /* ===== 标题与搜索栏 ===== */
   #header {
-    position: fixed; top: 22px; left: 26px; z-index: 10; user-select: none;
-    pointer-events: none;
+    position: fixed; top: 20px; left: 24px; z-index: 20; user-select: none;
+    pointer-events: none; display: flex; flex-direction: column; gap: 8px;
   }
+  #header .h-main { pointer-events: none; }
   #header h1 { font-size: 17px; font-weight: 500; letter-spacing: 3px; color: #eaf1ff; }
   #header p { font-size: 11px; color: #6f83a0; letter-spacing: 1px; margin-top: 3px; }
+
+  /* 搜索框 (Spotlight Search) */
+  .search-box {
+    position: relative; width: 300px; pointer-events: auto; margin-top: 2px;
+  }
+  .search-input-wrap {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(13, 20, 36, 0.75); border: 1px solid rgba(120, 160, 230, 0.28);
+    border-radius: 20px; padding: 4px 10px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
+  }
+  .search-input-wrap:focus-within {
+    border-color: rgba(125, 208, 255, 0.7);
+    box-shadow: 0 0 16px rgba(74, 130, 255, 0.3);
+    background: rgba(15, 24, 45, 0.9);
+  }
+  .search-icon { font-size: 12px; opacity: 0.7; }
+  #celestial-search {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: #eaf1ff; font-family: inherit; font-size: 12px;
+  }
+  #celestial-search::placeholder { color: #5a7090; font-size: 11px; }
+  .search-kbd {
+    background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px; padding: 1px 5px; font-size: 10px; color: #8aa0c4;
+  }
+  .search-results {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+    max-height: 280px; overflow-y: auto;
+    background: rgba(11, 17, 30, 0.94); border: 1px solid rgba(120, 160, 230, 0.3);
+    border-radius: 12px; box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    display: none; flex-direction: column; padding: 4px;
+  }
+  .search-results.show { display: flex; }
+  .search-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 10px; border-radius: 8px; cursor: pointer;
+    transition: background 0.12s;
+  }
+  .search-item:hover, .search-item.active {
+    background: rgba(74, 130, 255, 0.22);
+  }
+  .search-item-info { display: flex; flex-direction: column; gap: 2px; }
+  .search-item-name { font-size: 12.5px; color: #eaf1ff; font-weight: 500; }
+  .search-item-en { font-size: 10.5px; color: #7f95b5; }
+  .search-item-tag {
+    font-size: 10px; padding: 2px 6px; border-radius: 10px;
+    background: rgba(120, 160, 230, 0.15); color: #8ec3ff;
+    border: 1px solid rgba(120, 160, 230, 0.25);
+  }
+  .search-empty {
+    padding: 12px; text-align: center; font-size: 12px; color: #7f95b5;
+  }
+
   #btn-about {
-    pointer-events: auto; margin-top: 9px; cursor: pointer;
+    pointer-events: auto; margin-top: 2px; cursor: pointer; align-self: flex-start;
     background: rgba(120,160,230,.12); border: 1px solid rgba(120,160,230,.3);
     color: #aac3f0; font-size: 11px; padding: 4px 11px; border-radius: 14px; transition: all .15s;
   }

@@ -144,6 +144,27 @@ function makeRing(radius, N) {
     uv.setXY(i, (r - inner) / (outer - inner), 0.5);
   }
   const mat = new THREE.MeshBasicMaterial({ map: texSaturnRing(N), side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthWrite: false });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uPlanetCenter = { value: new THREE.Vector3() };
+    shader.uniforms.uPlanetRadius = { value: radius };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldP;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uPlanetCenter;\nuniform float uPlanetRadius;\nvarying vec3 vWorldP;')
+      .replace('#include <dithering_fragment>',
+        `#include <dithering_fragment>
+         vec3 sunDir = normalize(-uPlanetCenter);
+         vec3 toRing = vWorldP - uPlanetCenter;
+         float proj = dot(toRing, -sunDir);
+         if (proj > 0.0) {
+           vec3 perp = toRing - proj * (-sunDir);
+           float d = length(perp);
+           float shadow = smoothstep(uPlanetRadius * 0.92, uPlanetRadius * 1.05, d);
+           gl_FragColor.rgb *= mix(0.15, 1.0, shadow);
+         }`);
+    mat.userData.shader = shader;
+  };
   const ring = new THREE.Mesh(geo, mat);
   ring.rotation.x = Math.PI / 2;
   return ring;
@@ -412,4 +433,228 @@ function genPlanetTexture(p, N) {
     default:        return { map: texVenus(N) };
   }
 }
+
+/* ---- 哈雷彗星 3D 实体与动态彗尾 ---- */
+function createComet(comet, N) {
+  const holder = new THREE.Group();
+
+  // 彗核：深黑灰色不规则表面
+  const geom = new THREE.DodecahedronGeometry(comet.radius, 1);
+  const pos = geom.attributes.position;
+  let s = 98765;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < pos.count; i++) {
+    const k = 0.65 + rnd() * 0.7;
+    pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * (0.6 + rnd() * 0.4), pos.getZ(i) * k);
+  }
+  pos.needsUpdate = true;
+  geom.computeVertexNormals();
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x222426,
+    roughness: 0.95,
+    metalness: 0.05,
+    flatShading: true
+  });
+  const nucleus = new THREE.Mesh(geom, mat);
+  nucleus.userData = { ...comet, isComet: true, holder };
+  holder.add(nucleus);
+
+  // 彗发 (Coma)：核周围发光的球形气体云
+  const comaMat = new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(0x6ef0ff) },
+      opacity: { value: 0.7 }
+    },
+    vertexShader: `
+      varying vec3 vN; varying vec3 vP;
+      void main() {
+        vN = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vP = mv.xyz;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float opacity;
+      varying vec3 vN; varying vec3 vP;
+      void main() {
+        float f = pow(1.0 - max(dot(vN, normalize(-vP)), 0.0), 2.2);
+        gl_FragColor = vec4(color, f * opacity);
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    side: THREE.BackSide,
+    depthWrite: false
+  });
+  const coma = new THREE.Mesh(new THREE.SphereGeometry(comet.radius * 2.4, 24, 24), comaMat);
+  coma.layers.enable(BLOOM_LAYER);
+  holder.add(coma);
+
+  // 彗尾组：离子尾 (Ion Tail) + 尘埃尾 (Dust Tail)
+  const tailGroup = new THREE.Group();
+  holder.add(tailGroup);
+
+  // 离子尾 (窄长、笔直背向太阳，荧光蓝)
+  const ionGeo = new THREE.ConeGeometry(comet.radius * 1.3, 22, 24, 1, true);
+  ionGeo.translate(0, 11, 0);
+  ionGeo.rotateX(Math.PI / 2);
+  const ionMat = new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(0x35d8ff) },
+      uAlpha: { value: 0.8 }
+    },
+    vertexShader: `
+      varying float vDist;
+      void main() {
+        vDist = position.z / 22.0;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float uAlpha;
+      varying float vDist;
+      void main() {
+        float fade = smoothstep(0.0, 0.12, vDist) * smoothstep(1.0, 0.2, vDist);
+        gl_FragColor = vec4(color * (1.0 + (1.0 - vDist) * 1.6), fade * uAlpha);
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const ionTail = new THREE.Mesh(ionGeo, ionMat);
+  ionTail.layers.enable(BLOOM_LAYER);
+  tailGroup.add(ionTail);
+
+  // 尘埃尾 (略弯、宽泛、米白色/金黄色)
+  const dustGeo = new THREE.ConeGeometry(comet.radius * 2.6, 17, 24, 1, true);
+  dustGeo.translate(0, 8.5, 0);
+  dustGeo.rotateX(Math.PI / 2);
+  dustGeo.rotateY(0.12);
+  const dustMat = new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(0xffe2a0) },
+      uAlpha: { value: 0.5 }
+    },
+    vertexShader: `
+      varying float vDist;
+      void main() {
+        vDist = position.z / 17.0;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float uAlpha;
+      varying float vDist;
+      void main() {
+        float fade = smoothstep(0.0, 0.1, vDist) * smoothstep(1.0, 0.28, vDist);
+        gl_FragColor = vec4(color, fade * uAlpha);
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const dustTail = new THREE.Mesh(dustGeo, dustMat);
+  dustTail.layers.enable(BLOOM_LAYER);
+  tailGroup.add(dustTail);
+
+  return {
+    holder,
+    mesh: nucleus,
+    coma,
+    tailGroup,
+    ionTail,
+    dustTail,
+    ionMat,
+    dustMat,
+    comaMat
+  };
+}
+
+/* ---- 深空探测器 3D 实体创建 ---- */
+function createProbe(probe) {
+  const holder = new THREE.Group();
+  const probeGroup = new THREE.Group();
+  holder.add(probeGroup);
+
+  // 1. 金色高增益抛物面雷达天线
+  const dishGeo = new THREE.SphereGeometry(0.55, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.45);
+  const dishMat = new THREE.MeshStandardMaterial({
+    color: 0xffcc00,
+    metalness: 0.85,
+    roughness: 0.2,
+    side: THREE.DoubleSide
+  });
+  const dish = new THREE.Mesh(dishGeo, dishMat);
+  dish.rotation.x = Math.PI / 2;
+  probeGroup.add(dish);
+
+  // 副天线反射器支架
+  const subGeo = new THREE.ConeGeometry(0.12, 0.35, 8);
+  const subMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.5, roughness: 0.3 });
+  const sub = new THREE.Mesh(subGeo, subMat);
+  sub.position.z = 0.32;
+  sub.rotation.x = Math.PI / 2;
+  probeGroup.add(sub);
+
+  // 2. 探测器主体总成
+  const bodyGeo = new THREE.CylinderGeometry(0.26, 0.3, 0.38, 10);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xdddddd,
+    metalness: 0.3,
+    roughness: 0.6
+  });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.z = -0.22;
+  body.rotation.x = Math.PI / 2;
+  probeGroup.add(body);
+
+  // 3. RTG 伸展吊臂
+  const boomGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.1, 6);
+  const boomMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.5 });
+  const boom = new THREE.Mesh(boomGeo, boomMat);
+  boom.position.set(0.6, 0, -0.22);
+  boom.rotation.z = Math.PI / 3;
+  probeGroup.add(boom);
+
+  const rtgGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.32, 8);
+  const rtgMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.4, roughness: 0.8 });
+  const rtg = new THREE.Mesh(rtgGeo, rtgMat);
+  rtg.position.set(1.05, 0.24, -0.22);
+  probeGroup.add(rtg);
+
+  // 4. 定位光圈 (便于远景选中)
+  const haloGeo = new THREE.RingGeometry(0.65, 0.75, 24);
+  const haloMat = new THREE.MeshBasicMaterial({
+    color: 0xffd54f,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.45
+  });
+  const halo = new THREE.Mesh(haloGeo, haloMat);
+  probeGroup.add(halo);
+
+  // 5. 点击拾取的透明球体
+  const hitGeo = new THREE.SphereGeometry(1.5, 8, 8);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+  hitMesh.userData = { ...probe, isProbe: true, holder, probeGroup, halo };
+  holder.add(hitMesh);
+
+  return {
+    holder,
+    mesh: hitMesh,
+    probeGroup,
+    halo
+  };
+}
+
 
